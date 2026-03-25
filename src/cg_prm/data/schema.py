@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 
-ALLOWED_BENCHMARKS = frozenset({"docvqa", "clevr"})
+ALLOWED_BENCHMARKS = frozenset({"docvqa", "gqa", "visualwebbench"})
 ALLOWED_TRACE_MODES = frozenset({"canonical", "light", "free"})
 ALLOWED_STEP_TYPES = frozenset(
     {
@@ -345,4 +345,3 @@ class TraceRecord:
             "steps": [step.to_dict() for step in self.steps],
             "metadata": self.metadata,
         }
-

@@ -33,23 +33,41 @@
       "corrupted_cross_output": "data/corrupted/docvqa/eval_cross_corruptor.jsonl",
       "corrupted_wrong_use_output": "data/corrupted/docvqa/eval_wrong_use.jsonl"
     },
-    "clevr": {
+    "gqa": {
       "enabled": true,
-      "questions": "/ABS/PATH/TO/clevr/questions.json",
-      "images": "/ABS/PATH/TO/clevr/images",
-      "scenes": "/ABS/PATH/TO/clevr/scenes.json",
+      "questions": "/ABS/PATH/TO/gqa/questions.json",
+      "images": "/ABS/PATH/TO/gqa/images",
+      "scene_graphs": "/ABS/PATH/TO/gqa/sceneGraphs.json",
       "split": "train",
-      "prompt_id": "clevr_canonical_v1",
+      "prompt_id": "gqa_canonical_v1",
       "request_limit": 200,
-      "manifest_output": "data/manifests/clevr_train.jsonl",
-      "teacher_requests_output": "data/intermediate/clevr/teacher_requests.jsonl",
-      "teacher_outputs_input": "/ABS/PATH/TO/clevr/teacher_outputs.jsonl",
-      "teacher_traces_output": "data/intermediate/clevr/teacher_parsed.jsonl",
-      "verified_output": "data/verified/clevr/clean_verified.jsonl",
-      "rejected_output": "data/verified/clevr/clean_rejected.jsonl",
-      "corrupted_main_output": "data/corrupted/clevr/train_main.jsonl",
-      "corrupted_cross_output": "data/corrupted/clevr/eval_cross_corruptor.jsonl",
-      "corrupted_wrong_use_output": "data/corrupted/clevr/eval_wrong_use.jsonl"
+      "manifest_output": "data/manifests/gqa_train.jsonl",
+      "teacher_requests_output": "data/intermediate/gqa/teacher_requests.jsonl",
+      "teacher_outputs_input": "/ABS/PATH/TO/gqa/teacher_outputs.jsonl",
+      "teacher_traces_output": "data/intermediate/gqa/teacher_parsed.jsonl",
+      "verified_output": "data/verified/gqa/clean_verified.jsonl",
+      "rejected_output": "data/verified/gqa/clean_rejected.jsonl",
+      "corrupted_main_output": "data/corrupted/gqa/train_main.jsonl",
+      "corrupted_cross_output": "data/corrupted/gqa/eval_cross_corruptor.jsonl",
+      "corrupted_wrong_use_output": "data/corrupted/gqa/eval_wrong_use.jsonl"
+    },
+    "visualwebbench": {
+      "enabled": false,
+      "include_in_training_dataset": false,
+      "items": "/ABS/PATH/TO/visualwebbench/items.jsonl",
+      "images": "/ABS/PATH/TO/visualwebbench/images",
+      "split": "train",
+      "prompt_id": "visualwebbench_canonical_v1",
+      "request_limit": 200,
+      "manifest_output": "data/manifests/visualwebbench_train.jsonl",
+      "teacher_requests_output": "data/intermediate/visualwebbench/teacher_requests.jsonl",
+      "teacher_outputs_input": "/ABS/PATH/TO/visualwebbench/teacher_outputs.jsonl",
+      "teacher_traces_output": "data/intermediate/visualwebbench/teacher_parsed.jsonl",
+      "verified_output": "data/verified/visualwebbench/clean_verified.jsonl",
+      "rejected_output": "data/verified/visualwebbench/clean_rejected.jsonl",
+      "corrupted_main_output": "data/corrupted/visualwebbench/train_main.jsonl",
+      "corrupted_cross_output": "data/corrupted/visualwebbench/eval_cross_corruptor.jsonl",
+      "corrupted_wrong_use_output": "data/corrupted/visualwebbench/eval_wrong_use.jsonl"
     }
   }
 }

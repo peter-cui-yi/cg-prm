@@ -233,77 +233,161 @@ def choose_alternate_docvqa_span(
     return candidates[rng.randrange(len(candidates))]
 
 
-def parse_clevr_grounding_ref(grounding_ref: str) -> tuple[str, dict[str, Any]]:
-    """Parse the supported CLEVR grounding reference formats."""
+def parse_gqa_grounding_ref(grounding_ref: str) -> tuple[str, dict[str, Any]]:
+    """Parse the supported GQA grounding reference formats."""
     ref = grounding_ref.strip()
     if not ref:
         return "empty", {}
     if ref.startswith("object:"):
-        object_id = int(ref.split(":", maxsplit=1)[1])
+        object_id = ref.split(":", maxsplit=1)[1].strip()
         return "objects", {"object_ids": [object_id]}
     if ref.startswith("objects:"):
         raw_ids = ref.split(":", maxsplit=1)[1]
-        object_ids = [int(value.strip()) for value in raw_ids.split(",") if value.strip()]
+        object_ids = [value.strip() for value in raw_ids.split(",") if value.strip()]
         return "objects", {"object_ids": object_ids}
     if ref.startswith("relation:"):
-        _, relation_name, source_id, target_id = ref.split(":", maxsplit=3)
+        parts = ref.split(":", maxsplit=3)
+        if len(parts) != 4:
+            return "unknown", {"raw": ref}
+        _, relation_name, source_id, target_id = parts
+        if not relation_name.strip() or not source_id.strip() or not target_id.strip():
+            return "unknown", {"raw": ref}
         return "relation", {
-            "relation_name": relation_name,
-            "source_id": int(source_id),
-            "target_id": int(target_id),
+            "relation_name": relation_name.strip(),
+            "source_id": source_id.strip(),
+            "target_id": target_id.strip(),
         }
     return "unknown", {"raw": ref}
 
 
-def format_clevr_object_ref(object_ids: list[int]) -> str:
-    """Format a CLEVR object reference."""
+def format_gqa_object_ref(object_ids: list[str]) -> str:
+    """Format a GQA object reference."""
     if len(object_ids) == 1:
         return f"object:{object_ids[0]}"
-    return "objects:" + ",".join(str(object_id) for object_id in object_ids)
+    return "objects:" + ",".join(object_ids)
 
 
-def clevr_scene(example: NormalizedExample) -> dict[str, Any]:
-    """Return scene metadata for a CLEVR example."""
-    raw_scene = example.metadata.get("scene", {})
+def gqa_scene(example: NormalizedExample) -> dict[str, Any]:
+    """Return scene-graph metadata for a GQA example."""
+    raw_scene = example.metadata.get("scene_graph", {})
     return dict(raw_scene) if isinstance(raw_scene, Mapping) else {}
 
 
-def clevr_objects(example: NormalizedExample) -> list[dict[str, Any]]:
-    """Return CLEVR scene objects."""
-    scene = clevr_scene(example)
+def gqa_objects(example: NormalizedExample) -> list[dict[str, Any]]:
+    """Return GQA scene-graph objects."""
+    scene = gqa_scene(example)
     objects = scene.get("objects", [])
     if not isinstance(objects, list):
         return []
     return [dict(obj) for obj in objects if isinstance(obj, Mapping)]
 
 
-def choose_alternate_clevr_object_ids(
+def choose_alternate_gqa_object_ids(
     example: NormalizedExample,
     *,
-    current_ids: list[int],
+    current_ids: list[str],
     seed: int,
     salt: str,
-) -> list[int] | None:
-    """Choose alternate CLEVR object ids with matched cardinality."""
-    objects = clevr_objects(example)
-    available_ids = [int(obj["object_id"]) for obj in objects if "object_id" in obj]
-    candidates = [object_id for object_id in available_ids if object_id not in current_ids]
+) -> list[str] | None:
+    """Choose alternate GQA object ids with matched cardinality."""
+    objects = gqa_objects(example)
+    available_ids = [str(obj.get("object_id") or "").strip() for obj in objects]
+    candidates = [object_id for object_id in available_ids if object_id and object_id not in current_ids]
     if len(candidates) < len(current_ids):
         return None
-    rng = seeded_random(seed, example.example_id, ",".join(map(str, current_ids)), salt)
+    rng = seeded_random(seed, example.example_id, ",".join(current_ids), salt)
     rng.shuffle(candidates)
     return sorted(candidates[: len(current_ids)])
 
 
-def object_attribute_summary(example: NormalizedExample, object_ids: list[int]) -> str:
-    """Create a short attribute summary for a CLEVR object set."""
-    objects = {int(obj["object_id"]): obj for obj in clevr_objects(example) if "object_id" in obj}
+def gqa_object_attribute_summary(example: NormalizedExample, object_ids: list[str]) -> str:
+    """Create a short attribute summary for a GQA object set."""
+    objects = {
+        str(obj.get("object_id") or "").strip(): obj
+        for obj in gqa_objects(example)
+        if str(obj.get("object_id") or "").strip()
+    }
     summaries: list[str] = []
     for object_id in object_ids:
         obj = objects.get(object_id)
         if not obj:
             continue
-        parts = [str(obj.get(key)).strip() for key in ("color", "shape") if obj.get(key)]
+        parts: list[str] = []
+        attributes = obj.get("attributes", [])
+        if isinstance(attributes, list):
+            parts.extend(str(attribute).strip() for attribute in attributes[:2] if str(attribute).strip())
+        name = str(obj.get("name") or "").strip()
+        if name:
+            parts.append(name)
         if parts:
             summaries.append(" ".join(parts))
     return ", ".join(summaries)
+
+
+def visualwebbench_elements(example: NormalizedExample) -> list[dict[str, Any]]:
+    """Return normalized VisualWebBench elements."""
+    raw_elements = example.metadata.get("elements", [])
+    if not isinstance(raw_elements, list):
+        return []
+    return [dict(element) for element in raw_elements if isinstance(element, Mapping)]
+
+
+def lookup_visualwebbench_element(
+    example: NormalizedExample,
+    grounding_ref: str,
+) -> dict[str, Any] | None:
+    """Find a UI element by grounding ref."""
+    if not grounding_ref:
+        return None
+    candidate_ids = [grounding_ref]
+    if ":" in grounding_ref:
+        candidate_ids.append(grounding_ref.split(":")[-1])
+    for element in visualwebbench_elements(example):
+        element_id = str(element.get("element_id") or "").strip()
+        if element_id in candidate_ids:
+            return element
+    return None
+
+
+def choose_alternate_visualwebbench_element(
+    example: NormalizedExample,
+    *,
+    current_ref: str,
+    seed: int,
+    salt: str,
+) -> dict[str, Any] | None:
+    """Choose a different UI element for a VisualWebBench corruption."""
+    current = lookup_visualwebbench_element(example, current_ref)
+    current_norm = normalize_text(current.get("text")) if current else ""
+    candidates = [
+        element
+        for element in visualwebbench_elements(example)
+        if str(element.get("element_id") or "").strip()
+        and normalize_text(element.get("text")) != current_norm
+    ]
+    if not candidates:
+        return None
+    rng = seeded_random(seed, example.example_id, current_ref, salt)
+    return candidates[rng.randrange(len(candidates))]
+
+
+def parse_visualwebbench_grounding_ref(grounding_ref: str) -> tuple[str, dict[str, Any]]:
+    """Parse the supported VisualWebBench grounding reference formats."""
+    ref = grounding_ref.strip()
+    if not ref:
+        return "empty", {}
+    if ref.startswith("element:"):
+        element_id = ref.split(":", maxsplit=1)[1].strip()
+        return "elements", {"element_ids": [element_id]}
+    if ref.startswith("elements:"):
+        raw_ids = ref.split(":", maxsplit=1)[1]
+        element_ids = [value.strip() for value in raw_ids.split(",") if value.strip()]
+        return "elements", {"element_ids": element_ids}
+    return "unknown", {"raw": ref}
+
+
+def format_visualwebbench_element_ref(element_ids: list[str]) -> str:
+    """Format a VisualWebBench element reference."""
+    if len(element_ids) == 1:
+        return f"element:{element_ids[0]}"
+    return "elements:" + ",".join(element_ids)

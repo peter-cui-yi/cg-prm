@@ -14,7 +14,7 @@ The project is not trying to build a new agent or a new RL pipeline. It is tryin
 
 1. a clean supervision recipe for multimodal verifiers,
 2. a reliable experimental architecture to test whether that recipe learns genuine grounding,
-3. a paper-ready empirical story on `CLEVR` and `DocVQA`.
+3. a paper-ready empirical story on `DocVQA`, `GQA`, and a reduced-scope `VisualWebBench` track.
 
 ## Current Status
 
@@ -60,15 +60,14 @@ src/cg_prm/
 ├── data/
 │   ├── schema.py
 │   ├── docvqa.py
-│   ├── clevr.py
+│   ├── gqa.py
+│   ├── visualwebbench.py
 │   └── manifests.py
 ├── generation/
 │   ├── teacher.py
 │   ├── prompts.py
 │   └── segmentation.py
 ├── verification/
-│   ├── docvqa_rules.py
-│   ├── clevr_rules.py
 │   └── validators.py
 ├── corruption/
 │   ├── base.py
@@ -100,7 +99,7 @@ The system should be built as a sequence of independent, testable stages.
 
 Purpose:
 
-- normalize `DocVQA` and `CLEVR` into one common example format
+- normalize `DocVQA`, `GQA`, and `VisualWebBench` into one common example format
 - avoid task-specific logic leaking into downstream training code
 
 Required output format per example:
@@ -122,7 +121,8 @@ Required output format per example:
 Implementation rules:
 
 - `DocVQA` adapter must expose OCR spans or OCR-aligned tokens if available.
-- `CLEVR` adapter must expose symbolic scene metadata for exact verification.
+- `GQA` adapter must expose scene-graph-backed object and relation metadata.
+- `VisualWebBench` adapter must expose UI element metadata when available and label its verification mode explicitly.
 - never let later modules read raw benchmark files directly; all downstream code reads normalized manifests.
 
 ### Stage 2: Trace Schema
@@ -210,9 +210,14 @@ Purpose:
 - verify answer-supporting span alignment
 - verify whether the cited span actually contains or normalizes to the stated evidence
 
-`CLEVR` verification:
+`GQA` verification:
 
-- use scene graph / symbolic annotations for exact object, relation, and attribute checks
+- use scene graph annotations for object, relation, and attribute checks
+
+`VisualWebBench` verification:
+
+- use UI element ids and element text when available
+- otherwise fall back to weak answer validation on deterministic-answer subsets
 
 Hard rule:
 
@@ -264,14 +269,14 @@ Purpose:
 Spec:
 
 - `100` matched trace pairs per benchmark
-- only for `CLEVR` and `DocVQA`
+- only for `GQA` and `DocVQA`
 - evaluation-only
 - double annotation plus adjudication
 
 Store:
 
 - `data/human_challenge/docvqa.jsonl`
-- `data/human_challenge/clevr.jsonl`
+- `data/human_challenge/gqa.jsonl`
 - `data/human_challenge/annotation_protocol.md`
 
 Each record must include:
@@ -329,7 +334,7 @@ Supplementary evaluations:
 
 - full corruption-family sweeps
 - wider cross-generator variants
-- `ChartQA` transfer
+- `Agent-X` transfer
 - richer aggregation sweeps
 
 ## Strong Judge Contract
@@ -371,7 +376,7 @@ Interpretation rule:
 Codex should implement in this order:
 
 1. `schema.py` and manifests
-2. benchmark adapters for `DocVQA` and `CLEVR`
+2. benchmark adapters for `DocVQA`, `GQA`, and reduced-scope `VisualWebBench`
 3. deterministic free-form segmentation
 4. teacher generation runner
 5. automatic verification for both benchmarks
@@ -438,7 +443,7 @@ Do not let the project drift into:
 - new agent architecture work
 - reinforcement learning
 - full-model fine-tuning
-- broad benchmark expansion before the `CLEVR + DocVQA` story is stable
+- broad benchmark expansion before the `DocVQA + GQA` story is stable
 - paper claims built around weak or noisy reranking gains
 
 ## Immediate Next Files To Implement
@@ -447,10 +452,10 @@ When Codex starts coding, the first concrete files should be:
 
 1. `src/cg_prm/data/schema.py`
 2. `src/cg_prm/data/docvqa.py`
-3. `src/cg_prm/data/clevr.py`
+3. `src/cg_prm/data/gqa.py`
 4. `src/cg_prm/generation/segmentation.py`
-5. `src/cg_prm/verification/docvqa_rules.py`
-6. `src/cg_prm/verification/clevr_rules.py`
+5. `src/cg_prm/data/visualwebbench.py`
+6. `src/cg_prm/verification/validators.py`
 7. `src/cg_prm/corruption/families.py`
 
 After those exist, add training and evaluation.

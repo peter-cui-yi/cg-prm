@@ -33,7 +33,12 @@ class PromptTemplate:
 
 
 def _canonical_json_schema(benchmark: str) -> str:
-    grounding_hint = "ocr_span:<id>" if benchmark == "docvqa" else "object:<id>|objects:<id,id>|relation:<name>:<src>:<dst>"
+    if benchmark == "docvqa":
+        grounding_hint = "ocr_span:<id>"
+    elif benchmark == "gqa":
+        grounding_hint = "object:<id>|objects:<id,id>|relation:<name>:<src>:<dst>"
+    else:
+        grounding_hint = "element:<id>|elements:<id,id>"
     return (
         "Return valid JSON with this schema only:\n"
         "{{\n"
@@ -103,30 +108,30 @@ PROMPT_REGISTRY: dict[str, PromptTemplate] = {
             "Give a natural explanation followed by the answer."
         ),
     ),
-    "clevr_canonical_v1": PromptTemplate(
-        prompt_id="clevr_canonical_v1",
-        benchmark="clevr",
+    "gqa_canonical_v1": PromptTemplate(
+        prompt_id="gqa_canonical_v1",
+        benchmark="gqa",
         trace_mode="canonical",
         expects_json=True,
-        description="Structured CLEVR trace with explicit object or relation references.",
+        description="Structured GQA trace with explicit object or relation references.",
         system_prompt=(
-            "You are generating evidence-faithful reasoning traces for compositional visual reasoning. "
-            "Use only objects and relations that are visually supported."
+            "You are generating evidence-faithful reasoning traces for real-image compositional visual reasoning. "
+            "Use only object and relation references that are visually supported."
         ),
         user_template=(
             "Question: {question}\n"
             "Image path: {image_path}\n"
             "Task: Answer the question and provide a structured reasoning trace. "
             "Use object ids or relation references when possible.\n\n"
-            f"{_canonical_json_schema('clevr')}"
+            f"{_canonical_json_schema('gqa')}"
         ),
     ),
-    "clevr_light_v1": PromptTemplate(
-        prompt_id="clevr_light_v1",
-        benchmark="clevr",
+    "gqa_light_v1": PromptTemplate(
+        prompt_id="gqa_light_v1",
+        benchmark="gqa",
         trace_mode="light",
         expects_json=False,
-        description="Lightly structured CLEVR reasoning in short numbered steps.",
+        description="Lightly structured GQA reasoning in short numbered steps.",
         system_prompt=(
             "You are generating concise step-by-step compositional visual reasoning."
         ),
@@ -137,14 +142,63 @@ PROMPT_REGISTRY: dict[str, PromptTemplate] = {
             "Be explicit about counted objects or relations when relevant."
         ),
     ),
-    "clevr_free_v1": PromptTemplate(
-        prompt_id="clevr_free_v1",
-        benchmark="clevr",
+    "gqa_free_v1": PromptTemplate(
+        prompt_id="gqa_free_v1",
+        benchmark="gqa",
         trace_mode="free",
         expects_json=False,
-        description="Natural free-form CLEVR reasoning without explicit schema fields.",
+        description="Natural free-form GQA reasoning without explicit schema fields.",
         system_prompt=(
             "Answer the visual reasoning question naturally while remaining visually faithful."
+        ),
+        user_template=(
+            "Question: {question}\n"
+            "Image path: {image_path}\n"
+            "Give a natural explanation followed by the answer."
+        ),
+    ),
+    "visualwebbench_canonical_v1": PromptTemplate(
+        prompt_id="visualwebbench_canonical_v1",
+        benchmark="visualwebbench",
+        trace_mode="canonical",
+        expects_json=True,
+        description="Structured VisualWebBench trace with explicit UI element references.",
+        system_prompt=(
+            "You are generating evidence-faithful reasoning traces for web-grounding tasks. "
+            "Use only visible UI elements, text, icons, or layout cues supported by the screenshot."
+        ),
+        user_template=(
+            "Question: {question}\n"
+            "Image path: {image_path}\n"
+            "Task: Answer the question or predict the next action and provide a structured reasoning trace. "
+            "Cite UI elements with element ids when possible.\n\n"
+            f"{_canonical_json_schema('visualwebbench')}"
+        ),
+    ),
+    "visualwebbench_light_v1": PromptTemplate(
+        prompt_id="visualwebbench_light_v1",
+        benchmark="visualwebbench",
+        trace_mode="light",
+        expects_json=False,
+        description="Lightly structured VisualWebBench reasoning in short numbered steps.",
+        system_prompt=(
+            "You are generating concise step-by-step web-grounding reasoning."
+        ),
+        user_template=(
+            "Question: {question}\n"
+            "Image path: {image_path}\n"
+            "Write 2-4 short numbered steps, then a final answer line. "
+            "Mention visible UI elements or evidence cues when possible."
+        ),
+    ),
+    "visualwebbench_free_v1": PromptTemplate(
+        prompt_id="visualwebbench_free_v1",
+        benchmark="visualwebbench",
+        trace_mode="free",
+        expects_json=False,
+        description="Natural free-form VisualWebBench reasoning without explicit schema fields.",
+        system_prompt=(
+            "Answer the web-grounding question naturally while remaining screenshot-faithful."
         ),
         user_template=(
             "Question: {question}\n"

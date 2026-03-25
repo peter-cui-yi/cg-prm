@@ -19,10 +19,11 @@ from cg_prm.corruption import (
     generate_cross_corruptor_traces,
     generate_wrong_use_traces,
 )
-from cg_prm.data.clevr import write_clevr_manifest
 from cg_prm.data.docvqa import write_docvqa_manifest
+from cg_prm.data.gqa import write_gqa_manifest
 from cg_prm.data.manifests import load_manifest
 from cg_prm.data.schema import TraceRecord, read_jsonl, write_jsonl
+from cg_prm.data.visualwebbench import write_visualwebbench_manifest
 from cg_prm.generation.teacher import (
     GenerationConfig,
     TeacherOutput,
@@ -71,12 +72,19 @@ def _build_manifest(benchmark: str, payload: dict[str, Any]) -> tuple[list[Any],
             ocr_path=payload.get("ocr"),
             split=payload.get("split"),
         )
-    elif benchmark == "clevr":
-        manifest = write_clevr_manifest(
+    elif benchmark == "gqa":
+        manifest = write_gqa_manifest(
             output_path=manifest_output,
             questions_path=payload["questions"],
             image_root=payload["images"],
-            scenes_path=payload.get("scenes"),
+            scene_graphs_path=payload.get("scene_graphs"),
+            split=payload.get("split"),
+        )
+    elif benchmark == "visualwebbench":
+        manifest = write_visualwebbench_manifest(
+            output_path=manifest_output,
+            items_path=payload["items"],
+            image_root=payload.get("images"),
             split=payload.get("split"),
         )
     else:
@@ -199,6 +207,8 @@ def _maybe_build_training_dataset(
     for benchmark, summary in benchmark_summaries.items():
         if summary.get("status") == "disabled":
             continue
+        if not summary.get("include_in_training_dataset", True):
+            continue
         if summary.get("status") != "completed":
             pending_benchmarks.append(benchmark)
             continue
@@ -264,7 +274,12 @@ def run_pipeline(config: dict[str, Any]) -> dict[str, Any]:
             benchmark_summaries[benchmark] = {"status": "disabled"}
             continue
 
-        summary: dict[str, Any] = {"status": "started"}
+        summary: dict[str, Any] = {
+            "status": "started",
+            "include_in_training_dataset": bool(
+                benchmark_cfg.get("include_in_training_dataset", benchmark != "visualwebbench")
+            ),
+        }
         manifest, manifest_path = _build_manifest(benchmark, benchmark_cfg)
         summary["manifest_output"] = str(manifest_path)
         summary["manifest_count"] = len(manifest)

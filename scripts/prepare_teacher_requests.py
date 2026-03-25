@@ -29,7 +29,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--top-p", type=float, default=0.95)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--benchmark", choices=("docvqa", "clevr"))
+    parser.add_argument("--benchmark", choices=("docvqa", "gqa", "visualwebbench"))
     parser.add_argument("--limit", type=int, help="Optional maximum number of examples.")
     return parser
 

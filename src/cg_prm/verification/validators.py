@@ -11,7 +11,6 @@ GROUNDING_REQUIRED_STEP_TYPES = frozenset(
     {"locate", "read", "extract", "identify", "relate", "count", "compute", "reason", "verify"}
 )
 EVIDENCE_REQUIRED_STEP_TYPES = frozenset({"read", "extract", "count", "compute"})
-OBJECT_ATTRIBUTE_KEYS = ("color", "shape", "size", "material")
 
 
 @dataclass(slots=True)
@@ -153,63 +152,67 @@ def _validate_docvqa_step(
     )
 
 
-def _object_lookup(scene: Mapping[str, Any]) -> dict[int, Mapping[str, Any]]:
-    lookup: dict[int, Mapping[str, Any]] = {}
-    for item in scene.get("objects", []):
+def _gqa_object_lookup(scene_graph: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    lookup: dict[str, Mapping[str, Any]] = {}
+    for item in scene_graph.get("objects", []):
         if not isinstance(item, Mapping):
             continue
-        object_id = item.get("object_id")
-        if isinstance(object_id, int):
+        object_id = str(item.get("object_id") or "").strip()
+        if object_id:
             lookup[object_id] = item
     return lookup
 
 
-def _parse_clevr_grounding_ref(grounding_ref: str) -> tuple[str, dict[str, Any]]:
+def _parse_gqa_grounding_ref(grounding_ref: str) -> tuple[str, dict[str, Any]]:
     ref = grounding_ref.strip()
     if not ref:
         return "empty", {}
     if ref.startswith("object:"):
-        object_id = int(ref.split(":", maxsplit=1)[1])
+        object_id = ref.split(":", maxsplit=1)[1].strip()
         return "objects", {"object_ids": [object_id]}
     if ref.startswith("objects:"):
         raw_ids = ref.split(":", maxsplit=1)[1]
-        object_ids = [int(value.strip()) for value in raw_ids.split(",") if value.strip()]
+        object_ids = [value.strip() for value in raw_ids.split(",") if value.strip()]
         return "objects", {"object_ids": object_ids}
     if ref.startswith("relation:"):
-        _, relation_name, source_id, target_id = ref.split(":", maxsplit=3)
+        parts = ref.split(":", maxsplit=3)
+        if len(parts) != 4:
+            return "unknown", {"raw": ref}
+        _, relation_name, source_id, target_id = parts
+        if not relation_name.strip() or not source_id.strip() or not target_id.strip():
+            return "unknown", {"raw": ref}
         return "relation", {
-            "relation_name": relation_name,
-            "source_id": int(source_id),
-            "target_id": int(target_id),
+            "relation_name": relation_name.strip(),
+            "source_id": source_id.strip(),
+            "target_id": target_id.strip(),
         }
     return "unknown", {"raw": ref}
 
 
-def _validate_clevr_step(
+def _validate_gqa_step(
     step: TraceStep,
     *,
-    scene: Mapping[str, Any],
+    scene_graph: Mapping[str, Any],
 ) -> StepValidationResult:
     issues: list[ValidationIssue] = []
     metadata: dict[str, Any] = {}
-    objects = _object_lookup(scene)
-    relationships = scene.get("relationships") if isinstance(scene.get("relationships"), Mapping) else {}
+    objects = _gqa_object_lookup(scene_graph)
 
     if step.step_type in GROUNDING_REQUIRED_STEP_TYPES and not step.grounding_ref:
         issues.append(
             _make_issue(
                 "missing_grounding_ref",
-                "Grounding-critical CLEVR step is missing `grounding_ref`.",
+                "Grounding-critical GQA step is missing `grounding_ref`.",
                 step.step_id,
             )
         )
 
-    parsed_kind, parsed_payload = _parse_clevr_grounding_ref(step.grounding_ref)
+    parsed_kind, parsed_payload = _parse_gqa_grounding_ref(step.grounding_ref)
     if step.grounding_ref and parsed_kind == "unknown":
         issues.append(
             _make_issue(
                 "malformed_grounding_ref",
-                f"CLEVR grounding reference `{step.grounding_ref}` does not match a supported format.",
+                f"GQA grounding reference `{step.grounding_ref}` does not match a supported format.",
                 step.step_id,
             )
         )
@@ -222,7 +225,7 @@ def _validate_clevr_step(
             issues.append(
                 _make_issue(
                     "unknown_grounding_ref",
-                    f"CLEVR object ids {missing} are not present in the scene metadata.",
+                    f"GQA object ids {missing} are not present in the scene graph.",
                     step.step_id,
                 )
             )
@@ -232,7 +235,7 @@ def _validate_clevr_step(
                     issues.append(
                         _make_issue(
                             "evidence_mismatch",
-                            "CLEVR count step evidence does not match the grounded object set size.",
+                            "GQA count step evidence does not match the grounded object set size.",
                             step.step_id,
                         )
                     )
@@ -240,29 +243,28 @@ def _validate_clevr_step(
                 issues.append(
                     _make_issue(
                         "evidence_mismatch",
-                        "CLEVR count step evidence is not an integer.",
+                        "GQA count step evidence is not an integer.",
                         step.step_id,
                     )
                 )
         elif step.evidence_value and len(object_ids) == 1:
             object_payload = objects[object_ids[0]]
-            attribute_values = {
-                normalize_text(object_payload.get(attribute))
-                for attribute in OBJECT_ATTRIBUTE_KEYS
-                if object_payload.get(attribute) is not None
+            candidate_values = {
+                normalize_text(object_payload.get("name")),
+                *[
+                    normalize_text(attribute)
+                    for attribute in object_payload.get("attributes", [])
+                    if attribute is not None
+                ],
             }
+            candidate_values.discard("")
             evidence_value = normalize_text(step.evidence_value)
-            if (
-                evidence_value
-                and attribute_values
-                and evidence_value not in attribute_values
-                and evidence_value != normalize_text(object_ids[0])
-            ):
-                metadata["attribute_values"] = sorted(attribute_values)
+            if evidence_value and candidate_values and evidence_value not in candidate_values:
+                metadata["attribute_values"] = sorted(candidate_values)
                 issues.append(
                     _make_issue(
                         "evidence_mismatch",
-                        "CLEVR evidence value does not match the grounded object's attributes.",
+                        "GQA evidence value does not match the grounded object's attributes or name.",
                         step.step_id,
                     )
                 )
@@ -274,30 +276,28 @@ def _validate_clevr_step(
         metadata["relation_name"] = relation_name
         metadata["source_id"] = source_id
         metadata["target_id"] = target_id
-        relation_lists = relationships.get(relation_name)
-        if not isinstance(relation_lists, list):
+        source_object = objects.get(source_id)
+        if source_object is None:
             issues.append(
                 _make_issue(
                     "unknown_grounding_ref",
-                    f"CLEVR relation `{relation_name}` is not available in scene metadata.",
-                    step.step_id,
-                )
-            )
-        elif source_id >= len(relation_lists) or source_id < 0:
-            issues.append(
-                _make_issue(
-                    "unknown_grounding_ref",
-                    f"CLEVR source object id `{source_id}` is out of range for relation `{relation_name}`.",
+                    f"GQA source object id `{source_id}` is not present in the scene graph.",
                     step.step_id,
                 )
             )
         else:
-            valid_targets = relation_lists[source_id]
-            if target_id not in valid_targets:
+            relation_matches = [
+                relation
+                for relation in source_object.get("relations", [])
+                if isinstance(relation, Mapping)
+                and str(relation.get("name") or "").strip() == relation_name
+                and str(relation.get("target_object_id") or "").strip() == target_id
+            ]
+            if not relation_matches:
                 issues.append(
                     _make_issue(
                         "evidence_mismatch",
-                        "CLEVR relation step is inconsistent with scene metadata.",
+                        "GQA relation step is inconsistent with the scene graph.",
                         step.step_id,
                     )
                 )
@@ -306,12 +306,124 @@ def _validate_clevr_step(
         issues.append(
             _make_issue(
                 "missing_evidence_value",
-                "Evidence-bearing CLEVR step is missing `evidence_value`.",
+                "Evidence-bearing GQA step is missing `evidence_value`.",
                 step.step_id,
             )
         )
 
     passed = not issues
+    return StepValidationResult(
+        step_id=step.step_id,
+        passed=passed,
+        label=int(passed),
+        error_type=_error_type_from_issues(issues),
+        issues=issues,
+        metadata=metadata,
+    )
+
+
+def _visualwebbench_element_lookup(example: NormalizedExample) -> dict[str, Mapping[str, Any]]:
+    lookup: dict[str, Mapping[str, Any]] = {}
+    raw_elements = example.metadata.get("elements", [])
+    if not isinstance(raw_elements, list):
+        return lookup
+    for item in raw_elements:
+        if not isinstance(item, Mapping):
+            continue
+        element_id = str(item.get("element_id") or item.get("id") or "").strip()
+        if element_id:
+            lookup[element_id] = item
+    return lookup
+
+
+def _parse_visualwebbench_grounding_ref(grounding_ref: str) -> tuple[str, dict[str, Any]]:
+    ref = grounding_ref.strip()
+    if not ref:
+        return "empty", {}
+    if ref.startswith("element:"):
+        element_id = ref.split(":", maxsplit=1)[1].strip()
+        return "elements", {"element_ids": [element_id]}
+    if ref.startswith("elements:"):
+        raw_ids = ref.split(":", maxsplit=1)[1]
+        element_ids = [value.strip() for value in raw_ids.split(",") if value.strip()]
+        return "elements", {"element_ids": element_ids}
+    return "unknown", {"raw": ref}
+
+
+def _validate_visualwebbench_step(
+    step: TraceStep,
+    *,
+    example: NormalizedExample,
+) -> StepValidationResult:
+    issues: list[ValidationIssue] = []
+    metadata: dict[str, Any] = {}
+    verification_mode = str(example.metadata.get("verification_mode") or "weak_answer")
+    elements = _visualwebbench_element_lookup(example)
+
+    parsed_kind, parsed_payload = _parse_visualwebbench_grounding_ref(step.grounding_ref)
+    if step.grounding_ref and parsed_kind == "unknown":
+        issues.append(
+            _make_issue(
+                "malformed_grounding_ref",
+                f"VisualWebBench grounding reference `{step.grounding_ref}` does not match a supported format.",
+                step.step_id,
+            )
+        )
+
+    if verification_mode == "element":
+        if step.step_type in GROUNDING_REQUIRED_STEP_TYPES and not step.grounding_ref:
+            issues.append(
+                _make_issue(
+                    "missing_grounding_ref",
+                    "Grounding-critical VisualWebBench step is missing `grounding_ref`.",
+                    step.step_id,
+                )
+            )
+
+        if parsed_kind == "elements":
+            element_ids = parsed_payload["element_ids"]
+            metadata["element_ids"] = element_ids
+            missing = [element_id for element_id in element_ids if element_id not in elements]
+            if missing:
+                issues.append(
+                    _make_issue(
+                        "unknown_grounding_ref",
+                        f"VisualWebBench element ids {missing} are not present in metadata.",
+                        step.step_id,
+                    )
+                )
+            elif step.evidence_value:
+                element_texts = {
+                    normalize_text(element.get("text"))
+                    for element_id in element_ids
+                    for element in [elements[element_id]]
+                    if normalize_text(element.get("text"))
+                }
+                evidence_value = normalize_text(step.evidence_value)
+                if element_texts and evidence_value and all(
+                    evidence_value not in element_text and element_text not in evidence_value
+                    for element_text in element_texts
+                ):
+                    metadata["element_texts"] = sorted(element_texts)
+                    issues.append(
+                        _make_issue(
+                            "evidence_mismatch",
+                            "VisualWebBench evidence value does not align with the grounded UI element text.",
+                            step.step_id,
+                        )
+                    )
+
+        if step.step_type in EVIDENCE_REQUIRED_STEP_TYPES and not step.evidence_value:
+            issues.append(
+                _make_issue(
+                    "missing_evidence_value",
+                    "Evidence-bearing VisualWebBench step is missing `evidence_value`.",
+                    step.step_id,
+                )
+            )
+
+    passed = not issues
+    metadata["verification_mode"] = verification_mode
     return StepValidationResult(
         step_id=step.step_id,
         passed=passed,
@@ -352,12 +464,15 @@ def validate_trace(example: NormalizedExample, trace: TraceRecord) -> TraceValid
                         spans_by_id[span_id] = span
         for step in trace.steps:
             step_results.append(_validate_docvqa_step(step, spans_by_id=spans_by_id))
-    elif trace.benchmark == "clevr":
-        scene = example.metadata.get("scene", {})
-        if not isinstance(scene, Mapping):
-            scene = {}
+    elif trace.benchmark == "gqa":
+        scene_graph = example.metadata.get("scene_graph", {})
+        if not isinstance(scene_graph, Mapping):
+            scene_graph = {}
         for step in trace.steps:
-            step_results.append(_validate_clevr_step(step, scene=scene))
+            step_results.append(_validate_gqa_step(step, scene_graph=scene_graph))
+    elif trace.benchmark == "visualwebbench":
+        for step in trace.steps:
+            step_results.append(_validate_visualwebbench_step(step, example=example))
     else:
         raise ValueError(f"Unsupported benchmark `{trace.benchmark}`.")
 

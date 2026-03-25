@@ -162,11 +162,13 @@ def _infer_step_type(step_text: str, benchmark: str) -> str:
     if any(token in lowered for token in ("locate", "find", "look at", "header", "field")):
         return "locate"
     if any(token in lowered for token in ("read", "extract", "text says", "shows")):
-        return "read" if benchmark == "docvqa" else "extract"
+        return "read" if benchmark in {"docvqa", "visualwebbench"} else "extract"
     if any(token in lowered for token in ("count", "number of")):
         return "count"
     if any(token in lowered for token in ("left of", "right of", "behind", "front of", "relation")):
         return "relate"
+    if any(token in lowered for token in ("click", "tap", "select", "press", "open")):
+        return "derive"
     if any(token in lowered for token in ("therefore", "thus", "so the answer", "final answer")):
         return "answer"
     if any(token in lowered for token in ("because", "implies", "means")):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI for building normalized DocVQA and CLEVR manifests."""
+"""CLI for building normalized benchmark manifests."""
 
 from __future__ import annotations
 
@@ -12,8 +12,9 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from cg_prm.data.clevr import write_clevr_manifest
 from cg_prm.data.docvqa import write_docvqa_manifest
+from cg_prm.data.gqa import write_gqa_manifest
+from cg_prm.data.visualwebbench import write_visualwebbench_manifest
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -29,12 +30,21 @@ def _build_parser() -> argparse.ArgumentParser:
     docvqa.add_argument("--ocr", help="Optional OCR JSON path.")
     docvqa.add_argument("--split", help="Optional split name override.")
 
-    clevr = subparsers.add_parser("clevr", help="Build a CLEVR manifest.")
-    clevr.add_argument("--questions", required=True, help="Path to the CLEVR questions JSON.")
-    clevr.add_argument("--images", required=True, help="Root directory containing image files.")
-    clevr.add_argument("--output", required=True, help="Destination JSONL manifest path.")
-    clevr.add_argument("--scenes", help="Optional CLEVR scenes JSON path.")
-    clevr.add_argument("--split", help="Optional split name override.")
+    gqa = subparsers.add_parser("gqa", help="Build a GQA manifest.")
+    gqa.add_argument("--questions", required=True, help="Path to the GQA questions JSON.")
+    gqa.add_argument("--images", required=True, help="Root directory containing image files.")
+    gqa.add_argument("--output", required=True, help="Destination JSONL manifest path.")
+    gqa.add_argument("--scene-graphs", help="Optional GQA scene-graphs JSON path.")
+    gqa.add_argument("--split", help="Optional split name override.")
+
+    visualwebbench = subparsers.add_parser(
+        "visualwebbench",
+        help="Build a VisualWebBench manifest.",
+    )
+    visualwebbench.add_argument("--items", required=True, help="Path to the VisualWebBench JSON or JSONL file.")
+    visualwebbench.add_argument("--images", help="Optional root directory containing screenshot image files.")
+    visualwebbench.add_argument("--output", required=True, help="Destination JSONL manifest path.")
+    visualwebbench.add_argument("--split", help="Optional split name override.")
 
     return parser
 
@@ -51,12 +61,19 @@ def main() -> int:
             ocr_path=args.ocr,
             split=args.split,
         )
-    else:
-        manifest = write_clevr_manifest(
+    elif args.benchmark == "gqa":
+        manifest = write_gqa_manifest(
             output_path=args.output,
             questions_path=args.questions,
             image_root=args.images,
-            scenes_path=args.scenes,
+            scene_graphs_path=args.scene_graphs,
+            split=args.split,
+        )
+    else:
+        manifest = write_visualwebbench_manifest(
+            output_path=args.output,
+            items_path=args.items,
+            image_root=args.images,
             split=args.split,
         )
 

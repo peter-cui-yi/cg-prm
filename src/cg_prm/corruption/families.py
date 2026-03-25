@@ -7,20 +7,21 @@ from typing import Iterable
 
 from cg_prm.corruption.base import (
     CORRUPTION_FAMILIES,
-    WRONG_USE_TYPES,
     candidate_steps,
-    choose_alternate_clevr_object_ids,
     choose_alternate_docvqa_span,
+    choose_alternate_gqa_object_ids,
+    choose_alternate_visualwebbench_element,
     choose_step,
-    clevr_scene,
     finalize_corrupted_trace,
-    format_clevr_object_ref,
+    format_gqa_object_ref,
+    format_visualwebbench_element_ref,
+    gqa_object_attribute_summary,
+    gqa_scene,
     mutate_inference_text,
     mutate_relation_text,
-    object_attribute_summary,
-    parse_clevr_grounding_ref,
+    parse_gqa_grounding_ref,
 )
-from cg_prm.data.schema import NormalizedExample, TraceRecord, TraceStep
+from cg_prm.data.schema import NormalizedExample, TraceRecord
 
 
 def _docvqa_wrong_region(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
@@ -41,10 +42,7 @@ def _docvqa_wrong_region(example: NormalizedExample, trace: TraceRecord, seed: i
     )
     if alternate is None:
         return None
-    mutated = replace(
-        target,
-        grounding_ref=f"ocr_span:{alternate['span_id']}",
-    )
+    mutated = replace(target, grounding_ref=f"ocr_span:{alternate['span_id']}")
     return finalize_corrupted_trace(
         trace,
         family="wrong_region",
@@ -94,8 +92,7 @@ def _docvqa_wrong_relation(_example: NormalizedExample, trace: TraceRecord, seed
     )
     if target is None:
         return None
-    mutated_text = mutate_relation_text(target.step_text)
-    mutated = replace(target, step_text=mutated_text)
+    mutated = replace(target, step_text=mutate_relation_text(target.step_text))
     return finalize_corrupted_trace(
         trace,
         family="wrong_relation",
@@ -107,11 +104,7 @@ def _docvqa_wrong_relation(_example: NormalizedExample, trace: TraceRecord, seed
     )
 
 
-def _docvqa_irrelevant_evidence(
-    example: NormalizedExample,
-    trace: TraceRecord,
-    seed: int,
-) -> TraceRecord | None:
+def _docvqa_irrelevant_evidence(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
     target = choose_step(
         trace,
         seed=seed,
@@ -144,11 +137,7 @@ def _docvqa_irrelevant_evidence(
     )
 
 
-def _docvqa_wrong_intermediate(
-    example: NormalizedExample,
-    trace: TraceRecord,
-    seed: int,
-) -> TraceRecord | None:
+def _docvqa_wrong_intermediate(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
     target = choose_step(
         trace,
         seed=seed,
@@ -180,7 +169,7 @@ def _docvqa_wrong_intermediate(
     )
 
 
-def _clevr_wrong_region(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
+def _gqa_wrong_region(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
     target = choose_step(
         trace,
         seed=seed,
@@ -190,10 +179,10 @@ def _clevr_wrong_region(example: NormalizedExample, trace: TraceRecord, seed: in
     )
     if target is None:
         return None
-    kind, payload = parse_clevr_grounding_ref(target.grounding_ref)
+    kind, payload = parse_gqa_grounding_ref(target.grounding_ref)
     if kind != "objects":
         return None
-    alternate_ids = choose_alternate_clevr_object_ids(
+    alternate_ids = choose_alternate_gqa_object_ids(
         example,
         current_ids=payload["object_ids"],
         seed=seed,
@@ -201,7 +190,7 @@ def _clevr_wrong_region(example: NormalizedExample, trace: TraceRecord, seed: in
     )
     if alternate_ids is None:
         return None
-    mutated = replace(target, grounding_ref=format_clevr_object_ref(alternate_ids))
+    mutated = replace(target, grounding_ref=format_gqa_object_ref(alternate_ids))
     return finalize_corrupted_trace(
         trace,
         family="wrong_region",
@@ -213,7 +202,7 @@ def _clevr_wrong_region(example: NormalizedExample, trace: TraceRecord, seed: in
     )
 
 
-def _clevr_wrong_value(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
+def _gqa_wrong_value(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
     target = choose_step(
         trace,
         seed=seed,
@@ -222,18 +211,17 @@ def _clevr_wrong_value(example: NormalizedExample, trace: TraceRecord, seed: int
     )
     if target is None:
         return None
-    kind, payload = parse_clevr_grounding_ref(target.grounding_ref)
+    kind, payload = parse_gqa_grounding_ref(target.grounding_ref)
     if kind == "objects":
-        current_ids = payload["object_ids"]
-        alternate_ids = choose_alternate_clevr_object_ids(
+        alternate_ids = choose_alternate_gqa_object_ids(
             example,
-            current_ids=current_ids,
+            current_ids=payload["object_ids"],
             seed=seed,
             salt="wrong_value",
         )
         if alternate_ids is None:
             return None
-        alternate_summary = object_attribute_summary(example, alternate_ids) or str(len(alternate_ids))
+        alternate_summary = gqa_object_attribute_summary(example, alternate_ids) or str(len(alternate_ids))
         mutated = replace(target, evidence_value=alternate_summary)
     elif kind == "relation":
         mutated = replace(target, step_text=mutate_relation_text(target.step_text))
@@ -249,7 +237,7 @@ def _clevr_wrong_value(example: NormalizedExample, trace: TraceRecord, seed: int
     )
 
 
-def _clevr_wrong_relation(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
+def _gqa_wrong_relation(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
     target = choose_step(
         trace,
         seed=seed,
@@ -259,23 +247,32 @@ def _clevr_wrong_relation(example: NormalizedExample, trace: TraceRecord, seed: 
     )
     if target is None:
         return None
-    kind, payload = parse_clevr_grounding_ref(target.grounding_ref)
+    kind, payload = parse_gqa_grounding_ref(target.grounding_ref)
     mutated = None
     if kind == "relation":
         relation_name = str(payload["relation_name"])
-        relation_swapped = mutate_relation_text(relation_name)
-        scene = clevr_scene(example)
-        relationships = scene.get("relationships", {}) if isinstance(scene.get("relationships"), dict) else {}
-        candidate_name = relation_swapped.split()[0]
-        if candidate_name in relationships:
-            new_ref = (
-                f"relation:{candidate_name}:{payload['source_id']}:{payload['target_id']}"
-            )
-            mutated = replace(
-                target,
-                grounding_ref=new_ref,
-                step_text=mutate_relation_text(target.step_text),
-            )
+        scene = gqa_scene(example)
+        relationships = {}
+        for item in scene.get("objects", []):
+            if not isinstance(item, dict):
+                continue
+            object_id = str(item.get("object_id") or "").strip()
+            if object_id:
+                relationships[object_id] = item.get("relations", [])
+        swapped_name = mutate_relation_text(relation_name).split()[0]
+        source_relations = relationships.get(payload["source_id"], [])
+        for relation in source_relations:
+            if not isinstance(relation, dict):
+                continue
+            if str(relation.get("name") or "").strip() == swapped_name:
+                mutated = replace(
+                    target,
+                    grounding_ref=(
+                        f"relation:{swapped_name}:{payload['source_id']}:{payload['target_id']}"
+                    ),
+                    step_text=mutate_relation_text(target.step_text),
+                )
+                break
     if mutated is None:
         mutated = replace(target, step_text=mutate_relation_text(target.step_text))
     return finalize_corrupted_trace(
@@ -289,7 +286,7 @@ def _clevr_wrong_relation(example: NormalizedExample, trace: TraceRecord, seed: 
     )
 
 
-def _clevr_irrelevant_evidence(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
+def _gqa_irrelevant_evidence(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
     target = choose_step(
         trace,
         seed=seed,
@@ -298,10 +295,10 @@ def _clevr_irrelevant_evidence(example: NormalizedExample, trace: TraceRecord, s
     )
     if target is None:
         return None
-    kind, payload = parse_clevr_grounding_ref(target.grounding_ref)
+    kind, payload = parse_gqa_grounding_ref(target.grounding_ref)
     if kind != "objects":
         return None
-    alternate_ids = choose_alternate_clevr_object_ids(
+    alternate_ids = choose_alternate_gqa_object_ids(
         example,
         current_ids=payload["object_ids"],
         seed=seed,
@@ -311,8 +308,8 @@ def _clevr_irrelevant_evidence(example: NormalizedExample, trace: TraceRecord, s
         return None
     mutated = replace(
         target,
-        grounding_ref=format_clevr_object_ref(alternate_ids),
-        evidence_value=object_attribute_summary(example, alternate_ids) or target.evidence_value,
+        grounding_ref=format_gqa_object_ref(alternate_ids),
+        evidence_value=gqa_object_attribute_summary(example, alternate_ids) or target.evidence_value,
     )
     return finalize_corrupted_trace(
         trace,
@@ -325,7 +322,7 @@ def _clevr_irrelevant_evidence(example: NormalizedExample, trace: TraceRecord, s
     )
 
 
-def _clevr_wrong_intermediate(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
+def _gqa_wrong_intermediate(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
     target = choose_step(
         trace,
         seed=seed,
@@ -334,10 +331,13 @@ def _clevr_wrong_intermediate(example: NormalizedExample, trace: TraceRecord, se
     )
     if target is None:
         return None
-    kind, payload = parse_clevr_grounding_ref(target.grounding_ref)
+    kind, payload = parse_gqa_grounding_ref(target.grounding_ref)
     if kind == "objects":
-        current_ids = payload["object_ids"]
-        wrong_value = str(max(0, len(current_ids) - 1)) if target.step_type == "count" else "different object set"
+        wrong_value = (
+            str(max(0, len(payload["object_ids"]) - 1))
+            if target.step_type == "count"
+            else "different object set"
+        )
         mutated = replace(
             target,
             evidence_value=wrong_value,
@@ -345,6 +345,167 @@ def _clevr_wrong_intermediate(example: NormalizedExample, trace: TraceRecord, se
         )
     else:
         mutated = replace(target, step_text=mutate_inference_text(target.step_text))
+    return finalize_corrupted_trace(
+        trace,
+        family="wrong_intermediate_evidence",
+        generator_name="main",
+        target_step_id=target.step_id,
+        mutated_step=mutated,
+        preserve_answer=True,
+        extra_metadata={"answer_preserved": True},
+    )
+
+
+def _visualwebbench_wrong_region(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
+    target = choose_step(
+        trace,
+        seed=seed,
+        family="wrong_region",
+        require_grounding=True,
+        preferred_types=("locate", "read", "extract"),
+    )
+    if target is None:
+        return None
+    alternate = choose_alternate_visualwebbench_element(
+        example,
+        current_ref=target.grounding_ref,
+        seed=seed,
+        salt="wrong_region",
+    )
+    if alternate is None:
+        return None
+    mutated = replace(target, grounding_ref=format_visualwebbench_element_ref([alternate["element_id"]]))
+    return finalize_corrupted_trace(
+        trace,
+        family="wrong_region",
+        generator_name="main",
+        target_step_id=target.step_id,
+        mutated_step=mutated,
+        preserve_answer=True,
+        extra_metadata={"alternate_element_id": alternate["element_id"]},
+    )
+
+
+def _visualwebbench_wrong_value(example: NormalizedExample, trace: TraceRecord, seed: int) -> TraceRecord | None:
+    target = choose_step(
+        trace,
+        seed=seed,
+        family="wrong_value",
+        preferred_types=("read", "extract", "compute"),
+    )
+    if target is None or not target.grounding_ref:
+        return None
+    alternate = choose_alternate_visualwebbench_element(
+        example,
+        current_ref=target.grounding_ref,
+        seed=seed,
+        salt="wrong_value",
+    )
+    if alternate is None:
+        return None
+    mutated = replace(target, evidence_value=str(alternate.get("text") or "").strip() or "different element")
+    return finalize_corrupted_trace(
+        trace,
+        family="wrong_value",
+        generator_name="main",
+        target_step_id=target.step_id,
+        mutated_step=mutated,
+        preserve_answer=True,
+        extra_metadata={"alternate_element_id": alternate["element_id"]},
+    )
+
+
+def _visualwebbench_wrong_relation(
+    _example: NormalizedExample,
+    trace: TraceRecord,
+    seed: int,
+) -> TraceRecord | None:
+    target = choose_step(
+        trace,
+        seed=seed,
+        family="wrong_relation",
+        preferred_types=("reason", "derive", "compute", "locate"),
+    )
+    if target is None:
+        return None
+    mutated = replace(target, step_text=mutate_relation_text(target.step_text))
+    return finalize_corrupted_trace(
+        trace,
+        family="wrong_relation",
+        generator_name="main",
+        target_step_id=target.step_id,
+        mutated_step=mutated,
+        preserve_answer=True,
+        extra_metadata={"wrong_use_type": "wrong_relation_composition"},
+    )
+
+
+def _visualwebbench_irrelevant_evidence(
+    example: NormalizedExample,
+    trace: TraceRecord,
+    seed: int,
+) -> TraceRecord | None:
+    target = choose_step(
+        trace,
+        seed=seed,
+        family="irrelevant_evidence",
+        preferred_types=("read", "extract", "locate"),
+    )
+    if target is None:
+        return None
+    alternate = choose_alternate_visualwebbench_element(
+        example,
+        current_ref=target.grounding_ref,
+        seed=seed,
+        salt="irrelevant_evidence",
+    )
+    if alternate is None:
+        return None
+    mutated = replace(
+        target,
+        grounding_ref=format_visualwebbench_element_ref([alternate["element_id"]]),
+        evidence_value=str(alternate.get("text") or "").strip(),
+    )
+    return finalize_corrupted_trace(
+        trace,
+        family="irrelevant_evidence",
+        generator_name="main",
+        target_step_id=target.step_id,
+        mutated_step=mutated,
+        preserve_answer=True,
+        extra_metadata={"alternate_element_id": alternate["element_id"]},
+    )
+
+
+def _visualwebbench_wrong_intermediate(
+    example: NormalizedExample,
+    trace: TraceRecord,
+    seed: int,
+) -> TraceRecord | None:
+    target = choose_step(
+        trace,
+        seed=seed,
+        family="wrong_intermediate_evidence",
+        preferred_types=("read", "extract", "reason", "derive"),
+    )
+    if target is None:
+        return None
+    alternate = choose_alternate_visualwebbench_element(
+        example,
+        current_ref=target.grounding_ref,
+        seed=seed,
+        salt="wrong_intermediate",
+    )
+    wrong_value = (
+        str(alternate.get("text") or "").strip()
+        if alternate is not None
+        else target.evidence_value or "different UI cue"
+    )
+    mutated = replace(
+        target,
+        evidence_value=wrong_value,
+        step_text=mutate_inference_text(target.step_text),
+    )
     return finalize_corrupted_trace(
         trace,
         family="wrong_intermediate_evidence",
@@ -364,12 +525,19 @@ MAIN_GENERATORS = {
         "irrelevant_evidence": _docvqa_irrelevant_evidence,
         "wrong_intermediate_evidence": _docvqa_wrong_intermediate,
     },
-    "clevr": {
-        "wrong_region": _clevr_wrong_region,
-        "wrong_value": _clevr_wrong_value,
-        "wrong_relation": _clevr_wrong_relation,
-        "irrelevant_evidence": _clevr_irrelevant_evidence,
-        "wrong_intermediate_evidence": _clevr_wrong_intermediate,
+    "gqa": {
+        "wrong_region": _gqa_wrong_region,
+        "wrong_value": _gqa_wrong_value,
+        "wrong_relation": _gqa_wrong_relation,
+        "irrelevant_evidence": _gqa_irrelevant_evidence,
+        "wrong_intermediate_evidence": _gqa_wrong_intermediate,
+    },
+    "visualwebbench": {
+        "wrong_region": _visualwebbench_wrong_region,
+        "wrong_value": _visualwebbench_wrong_value,
+        "wrong_relation": _visualwebbench_wrong_relation,
+        "irrelevant_evidence": _visualwebbench_irrelevant_evidence,
+        "wrong_intermediate_evidence": _visualwebbench_wrong_intermediate,
     },
 }
 
@@ -404,11 +572,18 @@ def generate_wrong_use_traces(
     """Generate the three correct-evidence but wrong-use subtypes when possible."""
     traces: list[TraceRecord] = []
 
-    attribute_trace = None
-    if example.benchmark == "docvqa":
-        attribute_trace = _docvqa_wrong_value(example, trace, seed + 11)
-    elif example.benchmark == "clevr":
-        attribute_trace = _clevr_wrong_value(example, trace, seed + 11)
+    attribute_generators = {
+        "docvqa": _docvqa_wrong_value,
+        "gqa": _gqa_wrong_value,
+        "visualwebbench": _visualwebbench_wrong_value,
+    }
+    relation_generators = {
+        "docvqa": _docvqa_wrong_relation,
+        "gqa": _gqa_wrong_relation,
+        "visualwebbench": _visualwebbench_wrong_relation,
+    }
+
+    attribute_trace = attribute_generators[example.benchmark](example, trace, seed + 11)
     if attribute_trace is not None:
         metadata = dict(attribute_trace.metadata.get("corruption", {}))
         metadata["wrong_use_type"] = "wrong_attribute_readout"
@@ -418,11 +593,7 @@ def generate_wrong_use_traces(
         )
         traces.append(attribute_trace)
 
-    relation_trace = None
-    if example.benchmark == "docvqa":
-        relation_trace = _docvqa_wrong_relation(example, trace, seed + 23)
-    elif example.benchmark == "clevr":
-        relation_trace = _clevr_wrong_relation(example, trace, seed + 23)
+    relation_trace = relation_generators[example.benchmark](example, trace, seed + 23)
     if relation_trace is not None:
         metadata = dict(relation_trace.metadata.get("corruption", {}))
         metadata["wrong_use_type"] = "wrong_relation_composition"
