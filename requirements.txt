@@ -1,0 +1,8 @@
+# Core training/runtime dependencies for CG-PRM.
+# The data pipeline itself is stdlib-only, but training and model loading need these packages.
+
+accelerate>=1.0.0
+peft>=0.13.0
+safetensors>=0.4.5
+sentencepiece>=0.2.0
+transformers>=4.45.0
