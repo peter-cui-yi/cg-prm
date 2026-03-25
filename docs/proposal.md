@@ -15,7 +15,7 @@ We argue that the missing ingredient in current multimodal verifier training is 
 
 This proposal introduces **CG-PRM**, a counterfactual-grounding process reward model for verifiable multimodal reasoning. The central idea is to train a multimodal PRM not only on clean reasoning traces, but also on **hard counterfactual grounding negatives**: traces that remain locally fluent while breaking visual faithfulness at a specific intermediate step. CG-PRM combines three components: a canonical structured trace schema for multimodal reasoning, an automated pipeline for generating five families of grounding-specific counterfactual negatives, and a LoRA-trained visual PRM that predicts per-step groundedness scores together with a final trace score for best-of-N reranking.
 
-To keep the empirical claim sharp and executable within 40 days, the core study is deliberately scoped to **two primary benchmarks**: **CLEVR** as the low-noise causal anchor and **DocVQA** as the realistic visual-text grounding setting. The main evaluation question is not whether CG-PRM improves reasoning everywhere, but whether it improves verifier sensitivity on the hardest failure mode, namely **answer-correct but evidence-wrong traces**. We evaluate CG-PRM on step-level error detection, human-written hard negatives, cross-corruptor transfer, fixed-budget reranking, and free-form robustness. At a higher level, the proposal treats this as a **grounding-sensitive supervision recipe** problem: can multimodal verifiers be improved by a scalable, automatically constructed, and rigorously validated training signal that targets evidence use rather than answer correctness alone?
+To keep the empirical claim sharp while still using benchmarks that look current to the multimodal reasoning community, the study is organized around **two core grounding benchmarks** and **one modern agent-adjacent benchmark**. The core scientific identification will use **DocVQA** as the realistic document-grounding setting and **GQA** as the real-image compositional grounding setting. To test whether the method still matters on a more contemporary interface, the proposal adds **VisualWebBench** as a modern web-grounding and action-grounding benchmark with a narrower evaluation scope. The main evaluation question is not whether CG-PRM improves reasoning everywhere, but whether it improves verifier sensitivity on the hardest failure mode, namely **answer-correct but evidence-wrong traces**. We evaluate CG-PRM on step-level error detection, human-written hard negatives, cross-corruptor transfer, fixed-budget reranking, and free-form robustness. At a higher level, the proposal treats this as a **grounding-sensitive supervision recipe** problem: can multimodal verifiers be improved by a scalable, automatically constructed, and rigorously validated training signal that targets evidence use rather than answer correctness alone?
 
 ---
 
@@ -97,11 +97,11 @@ All training and evaluation traces follow a unified structured schema:
 
 This schema enforces a fixed decomposition of reasoning into evidence-relevant steps and makes it possible to supervise the PRM at the step level rather than only at the trace level.
 
-### 3.3 Primary Benchmark Scope and Canonical Traces
+### 3.3 Benchmark Scope and Canonical Traces
 
-To control experimental debt, the core paper will use **two primary benchmarks only**.
+To control experimental debt while avoiding an over-reliance on older synthetic benchmarks, the paper uses **two core scientific benchmarks** plus **one modern external-validation benchmark**.
 
-#### Primary Benchmark 1: DocVQA
+#### Core Benchmark 1: DocVQA
 
 The canonical trace is:
 
@@ -111,17 +111,25 @@ The `locate` step identifies the text region or line group relevant to the answe
 
 Automatic verification uses OCR tokens and span alignment. Supervision is restricted to cases where the answer can be linked to a specific OCR-backed span or a deterministic normalization of that span.
 
-#### Primary Benchmark 2: CLEVR
+#### Core Benchmark 2: GQA
 
 The canonical trace is:
 
-`identify relevant objects -> state relation, count, or attribute -> derive answer`
+`identify relevant objects -> verify attributes or relations -> derive answer`
 
-CLEVR provides a controlled environment because symbolic scene metadata makes step verification exact. This benchmark functions as the causal analysis anchor of the proposal: it isolates whether CG-PRM learns true step grounding under minimal annotation noise.
+GQA replaces the synthetic causal anchor with a **real-image** compositional grounding benchmark. The proposal uses GQA because it preserves structured semantics through scene graphs and relation annotations while avoiding dependence on a dated synthetic benchmark. Automatic verification is based on scene-graph-backed object, attribute, and relation checks, and supervision is restricted to question types for which supporting entities and relations can be aligned reliably.
 
-#### Optional Supplementary Extension: ChartQA
+#### Modern External-Validation Benchmark: VisualWebBench
 
-`ChartQA` is explicitly moved out of the core claim. If the core pipeline stabilizes early, it can be used as a supplementary transfer study for numerical and chart-grounding generalization. No main-paper claim will depend on ChartQA.
+The canonical trace is:
+
+`locate relevant UI element or evidence block -> read text, icon, or layout cue -> derive answer or next action`
+
+VisualWebBench functions as the modern agent-adjacent benchmark in the proposal. It is not used as the main causal anchor, because its task heterogeneity and interface complexity make exact step verification harder than in DocVQA or GQA. Instead, it serves as an external validation setting for whether CG-PRM continues to help on contemporary web-grounding and action-grounding tasks. Supervision is restricted to subsettings with deterministic target actions, answer labels, or element-level evidence signals that can support reasonably stable clean-trace filtering and counterfactual construction.
+
+#### Optional Supplementary Extension: Agent-X
+
+`Agent-X` is explicitly moved out of the core claim. If the core story is already stable, it can be used as a supplementary utility stress test for broader vision-agent settings. No main-paper claim will depend on Agent-X.
 
 ### 3.4 Clean Trace Generation
 
@@ -134,7 +142,7 @@ Only traces that pass the automatic verification rules are admitted as clean sup
 The key novelty of CG-PRM is the generation of **hard counterfactual grounding negatives**. Each negative trace is created by mutating one step at a time while keeping the surrounding narrative locally fluent. The proposal locks exactly five counterfactual families:
 
 1. **Wrong region with fluent step text**  
-   The step references a plausible but incorrect chart region, document span, or object subset.
+   The step references a plausible but incorrect document span, object subset, or UI element.
 
 2. **Correct region but wrong extracted attribute or value**  
    The grounding location is correct, but the evidence value is changed to an incorrect yet plausible attribute, token, or number.
@@ -215,12 +223,13 @@ To make the comparison against evidence supervision operational rather than rhet
 Instantiation by benchmark:
 
 - **DocVQA**: primarily categories 1 and 3, with a smaller number of category-2 cases in multi-field or layout-sensitive questions.
-- **CLEVR**: primarily categories 2 and 3, with category 1 instantiated as incorrect attribute binding over correctly identified objects.
+- **GQA**: primarily categories 2 and 3, with category 1 instantiated as incorrect attribute binding over correctly identified objects.
+- **VisualWebBench**: primarily categories 1 and 3, with category 2 appearing when the correct UI elements are identified but composed into the wrong action or page-level conclusion.
 
 Construction policy:
 
-- categories 1 and 2 can be generated automatically for both synthetic and semi-structured data,
-- category 3 is partly automatic in CLEVR and partly reserved for the human-written challenge set in DocVQA.
+- categories 1 and 2 can be generated automatically for document, scene-graph, and UI-grounding settings,
+- category 3 is automatic for a subset of GQA and VisualWebBench traces and is supplemented by human-written challenge examples where automatic generation is too brittle.
 
 This taxonomy is important because a pure evidence localizer may succeed on the evidence anchor while still missing whether the reasoning trace uses that evidence correctly.
 
@@ -253,7 +262,7 @@ This step is essential. If the negatives are trivial, then the PRM will learn to
 
 The proposal upgrades the manual check from a symbolic sanity check into a formal evaluation artifact.
 
-The **human-written grounding challenge set** will be built only for the two primary benchmarks, `CLEVR` and `DocVQA`. For each benchmark, the target artifact is:
+The **human-written grounding challenge set** will be built for the two core scientific benchmarks, `GQA` and `DocVQA`. VisualWebBench will receive synthetic and weak-verification evaluation, but not a full human challenge set in the main 40-day scope. For each core benchmark, the target artifact is:
 
 - **100 matched trace pairs** per benchmark,
 - for a total of **200 traces per benchmark** and **400 traces overall**.
@@ -487,19 +496,20 @@ To keep the paper executable within the 40-day budget, the experiment matrix is 
 
 Core studies:
 
-1. `CLEVR` + `DocVQA`
-2. clean-only visual PRM vs CG-PRM
-3. pairwise verifier baseline
-4. strong VLM-as-a-judge baseline
-5. evidence-supervision baseline
-6. one cross-corruptor split
-7. one human-written grounding challenge set
-8. one fixed-budget reranking study
-9. one schema robustness study
+1. `DocVQA` + `GQA` as the full validity matrix
+2. `VisualWebBench` as the modern external-validation benchmark with a reduced matrix
+3. clean-only visual PRM vs CG-PRM
+4. pairwise verifier baseline
+5. strong VLM-as-a-judge baseline
+6. evidence-supervision baseline on verifiable subsets
+7. one cross-corruptor split
+8. one human-written grounding challenge set on `DocVQA` and `GQA`
+9. one fixed-budget reranking study, with `VisualWebBench` included primarily in this utility track
+10. one schema robustness study on the two core benchmarks
 
 Secondary studies, to be moved to supplementary or future work if time is tight:
 
-1. `ChartQA`
+1. `Agent-X`
 2. text-only and answer-only diagnostics
 3. broader corruption-family sweeps beyond the main split
 4. wider decoding-regime coverage beyond the main reranking comparison
@@ -567,7 +577,7 @@ The proposal develops the empirical apparatus required to test whether the above
 
 ### Contribution 3: A systematic empirical study of answer-correct but evidence-wrong failures
 
-The proposal centers the paper on the most dangerous multimodal verifier failure mode and studies it across a low-noise causal setting (`CLEVR`) and a realistic visual-text setting (`DocVQA`), with fixed-budget reranking treated as a stress test of utility rather than a guaranteed practical payoff.
+The proposal centers the paper on the most dangerous multimodal verifier failure mode and studies it across a realistic document-grounding setting (`DocVQA`), a real-image compositional grounding setting (`GQA`), and a modern agent-adjacent web-grounding setting (`VisualWebBench`), with fixed-budget reranking treated as a stress test of utility rather than a guaranteed practical payoff.
 
 ---
 
@@ -679,20 +689,20 @@ flowchart TD
 
 | Days | Objective | Deliverables |
 |---|---|---|
-| 1-5 | Finalize the two primary benchmarks, human-set protocol, teacher prompts, verification rules, and subset-coverage diagnostics | Canonical trace spec, prompt pack, annotation guide, subset-bias checklist |
-| 6-10 | Generate pilot clean traces, run manual audit, and measure retained-subset coverage on CLEVR and DocVQA | Pilot trace bank, 100-sample audit, retained-subset report |
+| 1-5 | Finalize the benchmark split, human-set protocol, teacher prompts, verification rules, and subset-coverage diagnostics for `DocVQA`, `GQA`, and `VisualWebBench` | Canonical trace spec, prompt pack, annotation guide, subset-bias checklist |
+| 6-10 | Generate pilot clean traces, run manual audit, and measure retained-subset coverage on `DocVQA` and `GQA`, plus weak-verification retention on `VisualWebBench` | Pilot trace bank, 100-sample audit, retained-subset report |
 | 11-15 | Implement all five counterfactual generators, an independent second corruptor, and the three-tier free-form protocol | Counterfactual generator suite, cross-corruptor split, free-form prompt pack, hardness diagnostics |
-| 16-21 | Build the first full training set, train 3B CG-PRM, and construct the human-written grounding challenge set | v1 PRM checkpoint, early step-detection metrics, gold human challenge set |
-| 22-27 | Run the core benchmark matrix: clean-only PRM, pairwise verifier, strong judge, evidence supervision, and matched-budget reranking | Main result tables on CLEVR and DocVQA, fixed-budget comparison plots |
+| 16-21 | Build the first full training set, train 3B CG-PRM, and construct the human-written grounding challenge set for `DocVQA` and `GQA` | v1 PRM checkpoint, early step-detection metrics, gold human challenge set |
+| 22-27 | Run the core benchmark matrix: clean-only PRM, pairwise verifier, strong judge, evidence supervision, and matched-budget reranking | Main result tables on `DocVQA` and `GQA`, plus external-validation results on `VisualWebBench` |
 | 28-32 | Execute the core validity studies: schema robustness, OOD family transfer, cross-generator reranking, and intervention tests | Schema/free-form analysis, OOD generalization analysis, image/evidence-swap results |
-| 33-36 | Consolidate effect-size analysis and only run supplementary ChartQA transfer if the core story is already stable | Core punchline figures, optional supplementary transfer |
+| 33-36 | Consolidate effect-size analysis and only run supplementary `Agent-X` utility transfer if the core story is already stable | Core punchline figures, optional supplementary transfer |
 | 37-40 | Write the final academic proposal and polish figures | Final proposal, pipeline figure, error taxonomy figure, main experiment tables |
 
 ### Day-33 Quality Gate
 
 The proposal no longer requires a main-track `7B` verifier scale-up. The day-33 gate is now used for scope control:
 
-1. if the core claim is already supported on `CLEVR` and `DocVQA`, optional `ChartQA` transfer can be attempted as supplementary evidence;
+1. if the core claim is already supported on `DocVQA` and `GQA`, optional `Agent-X` transfer can be attempted as supplementary evidence;
 2. if the core claim is still unstable, all remaining time is spent on effect-size analysis, error diagnosis, and writing discipline rather than on wider experiments.
 
 ---
@@ -703,7 +713,7 @@ The proposal is explicitly scoped to a **maximum budget of 4xA800 over 40 days**
 
 - All primary runs are **LoRA-scale**.
 - The main model is the `3B` PRM.
-- The core paper depends on two benchmarks, not three.
+- The core scientific identification still depends on two fully controlled benchmarks, with `VisualWebBench` added as a narrower external-validation track.
 - A larger `7B` verifier is explicitly outside the main scope.
 - Data construction is automated-first and designed to minimize human annotation cost.
 
@@ -713,6 +723,6 @@ This budget is compatible with the scientific goal of the paper: validating whet
 
 ## 13. Conclusion
 
-CG-PRM is a focused proposal for improving verifiable multimodal reasoning at the verifier level. Instead of introducing a new reasoning policy, it targets the quality of the training signal used to score reasoning traces. The proposal argues that current PRMs are limited because they see too few examples of fluent-but-ungrounded reasoning. By constructing hard counterfactual grounding negatives across charts, documents, and synthetic compositional scenes, CG-PRM aims to teach a multimodal PRM to reward **faithfulness to evidence** rather than mere narrative plausibility.
+CG-PRM is a focused proposal for improving verifiable multimodal reasoning at the verifier level. Instead of introducing a new reasoning policy, it targets the quality of the training signal used to score reasoning traces. The proposal argues that current PRMs are limited because they see too few examples of fluent-but-ungrounded reasoning. By constructing hard counterfactual grounding negatives across documents, real-image compositional scenes, and modern web interfaces, CG-PRM aims to teach a multimodal PRM to reward **faithfulness to evidence** rather than mere narrative plausibility.
 
 If successful, this work would offer a practical and compute-efficient path toward more trustworthy multimodal reasoning systems: better step-level error detection, better trace reranking, and a cleaner methodology for evaluating whether a model actually reasons from visual evidence.
