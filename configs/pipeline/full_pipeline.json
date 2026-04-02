@@ -1,0 +1,55 @@
+{
+  "summary_output": "results/full/pipeline_summary.json",
+  "teacher": {
+    "model_name": "Qwen/Qwen3VL-32B-Thinking",
+    "max_tokens": 1024,
+    "temperature": 0.2,
+    "top_p": 0.95,
+    "seed": 0
+  },
+  "training_dataset": {
+    "enabled": true,
+    "pointwise_output": "data/full/training_pairs/pointwise_train.jsonl",
+    "pairwise_output": "data/full/training_pairs/pairwise_train.jsonl",
+    "critical_threshold": 0.5,
+    "critical_penalty": 0.5
+  },
+  "benchmarks": {
+    "clevr": {
+      "enabled": true,
+      "questions": "/hpc2hdd/home/ycui785/datasets/CLEVR/CLEVR_v1.0/questions/CLEVR_train_questions.json",
+      "images": "/hpc2hdd/home/ycui785/datasets/CLEVR/CLEVR_v1.0/images/train",
+      "scene_graphs": "/hpc2hdd/home/ycui785/datasets/CLEVR/CLEVR_v1.0/scenes/CLEVR_train_scenes.json",
+      "split": "train",
+      "prompt_id": "gqa_canonical_v1",
+      "request_limit": null,
+      "manifest_output": "data/full/manifests/clevr_train.jsonl",
+      "teacher_requests_output": "data/full/teacher_requests/clevr_train_requests.jsonl",
+      "teacher_outputs_input": "data/full/teacher_outputs/clevr_train_outputs.jsonl",
+      "teacher_traces_output": "data/full/clean_traces/clevr_parsed.jsonl",
+      "verified_output": "data/full/clean_traces/clevr_verified.jsonl",
+      "rejected_output": "data/full/clean_traces/clevr_rejected.jsonl",
+      "corrupted_main_output": "data/full/corrupted_traces/clevr_main.jsonl",
+      "corrupted_cross_output": "data/full/corrupted_traces/clevr_cross.jsonl",
+      "corrupted_wrong_use_output": "data/full/corrupted_traces/clevr_wrong_use.jsonl"
+    },
+    "docvqa": {
+      "enabled": true,
+      "questions": "/hpc2hdd/home/ycui785/datasets/DocVQA/train_v1.0.json",
+      "images": "/hpc2hdd/home/ycui785/datasets/DocVQA/images/train",
+      "ocr": "/hpc2hdd/home/ycui785/datasets/DocVQA/train_v1.0.ocr.json",
+      "split": "train",
+      "prompt_id": "docvqa_canonical_v1",
+      "request_limit": null,
+      "manifest_output": "data/full/manifests/docvqa_train.jsonl",
+      "teacher_requests_output": "data/full/teacher_requests/docvqa_train_requests.jsonl",
+      "teacher_outputs_input": "data/full/teacher_outputs/docvqa_train_outputs.jsonl",
+      "teacher_traces_output": "data/full/clean_traces/docvqa_parsed.jsonl",
+      "verified_output": "data/full/clean_traces/docvqa_verified.jsonl",
+      "rejected_output": "data/full/clean_traces/docvqa_rejected.jsonl",
+      "corrupted_main_output": "data/full/corrupted_traces/docvqa_main.jsonl",
+      "corrupted_cross_output": "data/full/corrupted_traces/docvqa_cross.jsonl",
+      "corrupted_wrong_use_output": "data/full/corrupted_traces/docvqa_wrong_use.jsonl"
+    }
+  }
+}

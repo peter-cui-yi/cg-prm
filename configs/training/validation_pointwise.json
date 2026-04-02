@@ -1,0 +1,38 @@
+{
+  "model_name_or_path": "/hpc2hdd/home/ycui785/model/qwen3vl-4b",
+  "train_file": "data/validation_5k/training_pairs/pointwise_train.jsonl",
+  "eval_file": "data/validation_5k/training_pairs/pointwise_val.jsonl",
+  "output_dir": "outputs/validation_pointwise",
+  "task_type": "pointwise",
+  "max_length": 4096,
+  "per_device_train_batch_size": 2,
+  "per_device_eval_batch_size": 2,
+  "gradient_accumulation_steps": 4,
+  "num_train_epochs": 3,
+  "learning_rate": 0.0001,
+  "weight_decay": 0.01,
+  "warmup_ratio": 0.05,
+  "lr_scheduler_type": "cosine",
+  "logging_steps": 10,
+  "save_steps": 200,
+  "save_total_limit": 2,
+  "evaluation_strategy": "steps",
+  "eval_steps": 100,
+  "bf16": true,
+  "gradient_checkpointing": false,
+  "load_in_4bit": false,
+  "trust_remote_code": true,
+  "report_to": [],
+  "lora": {
+    "r": 16,
+    "alpha": 32,
+    "dropout": 0.05,
+    "bias": "none",
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj"
+    ]
+  }
+}
