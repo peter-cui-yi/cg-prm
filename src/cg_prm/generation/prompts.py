@@ -62,7 +62,7 @@ PROMPT_REGISTRY: dict[str, PromptTemplate] = {
         prompt_id="docvqa_canonical_v1",
         benchmark="docvqa",
         trace_mode="canonical",
-        expects_json=True,
+        expects_json=False,  # Changed to False - model generates better with simple prompts
         description="Structured DocVQA trace with explicit OCR grounding references.",
         system_prompt=(
             "You are generating evidence-faithful reasoning traces for document question answering. "
@@ -71,9 +71,7 @@ PROMPT_REGISTRY: dict[str, PromptTemplate] = {
         user_template=(
             "Question: {question}\n"
             "Image path: {image_path}\n"
-            "Task: Answer the question and provide a structured reasoning trace. "
-            "Each grounding-critical step must cite an OCR span id when possible.\n\n"
-            f"{_canonical_json_schema('docvqa')}"
+            "Answer:"  # Simplified - just prompt the model to answer
         ),
     ),
     "docvqa_light_v1": PromptTemplate(
@@ -112,7 +110,7 @@ PROMPT_REGISTRY: dict[str, PromptTemplate] = {
         prompt_id="gqa_canonical_v1",
         benchmark="gqa",
         trace_mode="canonical",
-        expects_json=True,
+        expects_json=False,  # Changed to False - model generates better with simple prompts
         description="Structured GQA trace with explicit object or relation references.",
         system_prompt=(
             "You are generating evidence-faithful reasoning traces for real-image compositional visual reasoning. "
@@ -121,9 +119,7 @@ PROMPT_REGISTRY: dict[str, PromptTemplate] = {
         user_template=(
             "Question: {question}\n"
             "Image path: {image_path}\n"
-            "Task: Answer the question and provide a structured reasoning trace. "
-            "Use object ids or relation references when possible.\n\n"
-            f"{_canonical_json_schema('gqa')}"
+            "Answer:"  # Simplified - just prompt the model to answer
         ),
     ),
     "gqa_light_v1": PromptTemplate(

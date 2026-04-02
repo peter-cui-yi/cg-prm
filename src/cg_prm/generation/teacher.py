@@ -233,9 +233,30 @@ def _build_trace_from_text(
     trace_mode: str,
 ) -> TraceRecord:
     request = output.request
-    segments = segment_trace(output.raw_text, trace_mode)
+    raw_text = output.raw_text.strip()
+    
+    # Check if we have any actual text
+    if not raw_text:
+        raise ValueError(f"Teacher output for {request.example.example_id} has empty raw_text. Make sure vLLM inference saved the actual model response.")
+    
+    segments = segment_trace(raw_text, trace_mode)
+    
+    # If no segments found, split by newlines/paragraphs as fallback
     if not segments:
-        raise ValueError("Teacher output could not be segmented into any steps.")
+        # Split by double newlines (paragraphs) or single newlines
+        segments = [s.strip() for s in raw_text.split('\n\n') if s.strip()]
+        if not segments:
+            segments = [s.strip() for s in raw_text.split('\n') if s.strip() and len(s.strip()) > 20]
+        # If still nothing, use the whole text as one step
+        if not segments and len(raw_text) > 50:
+            segments = [raw_text]
+    
+    if not segments:
+        raise ValueError(
+            f"Teacher output for {request.example.example_id} could not be segmented into any steps. "
+            f"raw_text length: {len(raw_text)}. "
+            f"First 200 chars: {raw_text[:200]}"
+        )
     steps = [
         TraceStep(
             image=request.example.image_path,

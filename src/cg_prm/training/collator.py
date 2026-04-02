@@ -39,8 +39,27 @@ def serialize_trace(trace: Mapping[str, Any] | dict[str, Any]) -> str:
 
 
 def format_pointwise_example(record: Mapping[str, Any]) -> dict[str, Any]:
-    """Convert one pointwise supervision record into prompt-target text."""
-    trace = _trace_dict(record["trace"])
+    """Convert one pointwise supervision record into prompt-target text.
+
+    Accepts two schemas:
+    - Full pipeline: ``{trace, step_labels, trace_score_target, trace_label, record_id}``
+    - Mini/pair schema: ``{positive, negative, t_star, family}`` — treats the
+      positive trace as the supervised example (label=1 for each step).
+    """
+    if "trace" in record:
+        trace = _trace_dict(record["trace"])
+        step_labels = list(record["step_labels"])
+        trace_score_target = float(record["trace_score_target"])
+        trace_label = int(record["trace_label"])
+        record_id = record["record_id"]
+    else:
+        # Mini data: positive/negative pair — supervise the positive trace.
+        trace = _trace_dict(record.get("positive") or record.get("preferred_trace"))
+        step_labels = [int(s.get("label", 1)) for s in trace.get("steps", [])]
+        trace_score_target = 1.0
+        trace_label = 1
+        record_id = str(trace.get("trace_id") or id(record))
+
     question = trace["question"]
     image_path = trace["image_path"]
     trace_text = serialize_trace(trace)
@@ -55,9 +74,9 @@ def format_pointwise_example(record: Mapping[str, Any]) -> dict[str, Any]:
     )
     target = json.dumps(
         {
-            "step_labels": list(record["step_labels"]),
-            "final_score": float(record["trace_score_target"]),
-            "trace_label": int(record["trace_label"]),
+            "step_labels": step_labels,
+            "final_score": trace_score_target,
+            "trace_label": trace_label,
         },
         ensure_ascii=True,
     )
@@ -65,14 +84,27 @@ def format_pointwise_example(record: Mapping[str, Any]) -> dict[str, Any]:
         "prompt": prompt,
         "target": target,
         "image_path": image_path,
-        "record_id": record["record_id"],
+        "record_id": record_id,
     }
 
 
 def format_pairwise_example(record: Mapping[str, Any]) -> dict[str, Any]:
-    """Convert one pairwise supervision record into prompt-target text."""
-    preferred = _trace_dict(record["preferred_trace"])
-    rejected = _trace_dict(record["rejected_trace"])
+    """Convert one pairwise supervision record into prompt-target text.
+
+    Accepts two schemas:
+    - Full pipeline: ``{preferred_trace, rejected_trace, pair_id}``
+    - Mini/pair schema: ``{positive, negative, t_star, family}``
+    """
+    if "preferred_trace" in record:
+        preferred = _trace_dict(record["preferred_trace"])
+        rejected = _trace_dict(record["rejected_trace"])
+        pair_id = record["pair_id"]
+    else:
+        preferred = _trace_dict(record.get("positive"))
+        rejected = _trace_dict(record.get("negative"))
+        pos_id = str(preferred.get("trace_id") or id(record))
+        pair_id = f"{pos_id}_pair"
+
     question = preferred["question"]
     image_path = preferred["image_path"]
     preferred_text = serialize_trace(preferred)
@@ -93,7 +125,7 @@ def format_pairwise_example(record: Mapping[str, Any]) -> dict[str, Any]:
         "prompt": prompt,
         "target": target,
         "image_path": image_path,
-        "record_id": record["pair_id"],
+        "record_id": pair_id,
     }
 
 

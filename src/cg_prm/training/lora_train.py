@@ -153,12 +153,13 @@ def _resolve_model(config: TrainingConfig):
     import torch
     from transformers import AutoModelForCausalLM
 
+    dtype = torch.bfloat16 if config.bf16 else torch.float16
     model_kwargs: dict[str, Any] = {"trust_remote_code": config.trust_remote_code}
     if config.load_in_4bit:
         model_kwargs["load_in_4bit"] = True
         model_kwargs["device_map"] = "auto"
     else:
-        model_kwargs["torch_dtype"] = torch.bfloat16 if config.bf16 else torch.float16
+        model_kwargs["dtype"] = dtype
 
     try:
         from transformers import AutoModelForImageTextToText
@@ -212,6 +213,13 @@ def train_from_config(config: TrainingConfig) -> None:
     model = _apply_lora(model, config)
     if config.gradient_checkpointing and hasattr(model, "gradient_checkpointing_enable"):
         model.gradient_checkpointing_enable()
+        # Required when gradient checkpointing + PEFT: input embeddings must propagate grads
+        if hasattr(model, "enable_input_require_grads"):
+            model.enable_input_require_grads()
+    
+    # Workaround for DDP + LoRA + gradient checkpointing "ready twice" error
+    if hasattr(model, "_set_static_graph"):
+        model._set_static_graph()
 
     training_args = TrainingArguments(
         output_dir=config.output_dir,
@@ -228,7 +236,7 @@ def train_from_config(config: TrainingConfig) -> None:
         bf16=config.bf16,
         report_to=config.report_to,
         remove_unused_columns=False,
-        evaluation_strategy="steps" if eval_dataset is not None else "no",
+        eval_strategy="steps" if eval_dataset is not None else "no",
         eval_steps=config.save_steps if eval_dataset is not None else None,
     )
 
@@ -238,7 +246,7 @@ def train_from_config(config: TrainingConfig) -> None:
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         data_collator=data_collator,
-        tokenizer=tokenizer,
+        processing_class=processor if processor is not None else tokenizer,
     )
     trainer.train()
     trainer.save_model(config.output_dir)
