@@ -1,0 +1,16 @@
+{
+  "cg_prm": {
+    "auroc": 0.483048271208092,
+    "ci_lower": 0.4673236509558086,
+    "ci_upper": 0.49834602204694806
+  },
+  "pointwise": {
+    "auroc": 0.7964887933525006,
+    "ci_lower": 0.7766323974228669,
+    "ci_upper": 0.8167530177934952
+  },
+  "delta": -0.31344052214440854,
+  "decision": "NO-GO",
+  "reason": "CG-PRM performs worse than pointwise \u2014 hypothesis rejected",
+  "mock_evaluation": false
+}
